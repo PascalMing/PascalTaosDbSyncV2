@@ -1,0 +1,59 @@
+swagger:
+  enabled: false
+
+server:
+  # 服务器的HTTP端口，默认为80
+  port: 80
+  servlet:
+    # 应用的访问路径
+    context-path: /
+  tomcat:
+    # tomcat的URI编码
+    uri-encoding: UTF-8
+
+logging:
+  level:
+    com.pascalming: info
+    org.springframework: warn
+
+iot:
+  #服务模式：true=服务,false=进程
+  servermode: true
+  dbsync:
+    taos:
+      #连接池参数
+      initialSize: 5
+      minIdle: 5
+      maxActive: 100
+      maxWait: 300000
+
+      #同步执行参数
+      batchcount: 500
+      maxSyncThread: 50
+      updataRetry: 3
+      Charset: UTF-8
+      #同步时间，[tsBegin,tsEnd)，即 ts >= tsBegine and ts < tsEnd
+      tsBegin: 2021-05-05 00:00:00
+      tsEnd:    2021-05-05 01:00:00
+
+#数据源配置，必须修改broker
+#TAOS-RS: com.taosdata.jdbc.rs.RestfulDriver, port:6041
+#TAOS:com.taosdata.jdbc.TSDBDriver, port:6030
+#taos数据源 source，低版本的必须使用com.taosdata.jdbc.TSDBDriver，高版本没有限制
+      source:
+        driver: com.taosdata.jdbc.TSDBDriver
+        broker: x.x.x.x:6041
+        user: root
+        password: taosdata
+        taosdb: taosdb_from
+        #可以指定具体同步发超级表范围，不指定时表示taosdb下的所有超级表
+        stables: #stable01,stable02
+
+#taos数据源 destination
+      destination:
+        driver: com.taosdata.jdbc.rs.RestfulDriver
+        broker: x.x.x.x:6041
+        user: root
+        password: taosdata
+        taosdb: taosdb_to
+
