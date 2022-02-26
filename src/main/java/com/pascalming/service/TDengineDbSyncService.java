@@ -52,6 +52,9 @@ public class TDengineDbSyncService implements ApplicationContextAware {
     @Value("${iot.dbsync.taos.source.stables}")
     public List<String> source_stables;
 
+    @Value("${iot.dbsync.taos.batchcount}")
+    public int taos_batchCount;
+
     @Autowired
     private TDengineDbDruidService tDengineDbDruidService;
 
@@ -107,6 +110,7 @@ public class TDengineDbSyncService implements ApplicationContextAware {
                     continue;
                 }
                 ThreadDbSyncSingle t1 = new ThreadDbSyncSingle(tsBegin,tsEnd,tDengineDbService,tDengineDbDruidService, stable,listTbname.get(index));
+                t1.taos_batchCount = taos_batchCount;
                 t1.start();
                 index ++;
             }

@@ -5,6 +5,8 @@ import com.pascalming.domain.TaosTbName;
 import com.pascalming.utils.PascalLogger;
 import org.apache.log4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.stereotype.Component;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -20,10 +22,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @description: taos 子表同步服务，支持多线程以提高吞吐量
  */
 
+
 public class ThreadDbSyncSingle extends Thread {
     static Logger logger = Logger.getLogger(ThreadDbSyncSingle.class);
-    public String taos_tsBegin;
-    public String taos_tsEnd;
+    private String taos_tsBegin;
+    private String taos_tsEnd;
     private TDengineDbService tDengineDbService;
     private TDengineDbDruidService tDengineDbDruidService;
 
@@ -31,8 +34,7 @@ public class ThreadDbSyncSingle extends Thread {
     private TaosStable stable;
     private TaosTbName taostb;
 
-    @Value("${iot.dbsync.taos.batchcount}")
-    private int taos_batchCount;
+    public int taos_batchCount=300;
 
     @Override
     public void run()
@@ -71,6 +73,8 @@ public class ThreadDbSyncSingle extends Thread {
         long rsCountSource = 0;
         long rsCountDestination = 0;
         String tags = tDengineDbService.dbInitSingleTableTagsSql(taostb);
+        String sql = "";
+        StringBuilder values = new StringBuilder();
         try {
             rsCountSource = tDengineDbService.dbGetTableRowsCount(true,taostb.tbname,stable.Field.get(0),taos_tsBegin,taos_tsEnd);
             rsCountDestination = tDengineDbService.dbGetTableRowsCount(false,taostb.tbname,stable.Field.get(0),taos_tsBegin,taos_tsEnd);
@@ -88,10 +92,10 @@ public class ThreadDbSyncSingle extends Thread {
             connTo = tDengineDbDruidService.getDestinationConn();
             connFrom = tDengineDbDruidService.getSourceConn();
             stmt = connFrom.createStatement();
-            String sql = "select * from " + taostb.tbname + tDengineDbService.dbGetWhereTsSubSql(stable.Field.get(0),stBegin,taos_tsEnd);
+            sql = "select * from " + taostb.tbname + tDengineDbService.dbGetWhereTsSubSql(stable.Field.get(0),stBegin,taos_tsEnd);
             PascalLogger.info(logger,sql);
             ResultSet rsRecord = stmt.executeQuery(sql);
-            StringBuilder values = new StringBuilder();
+            values = new StringBuilder();
             int batchCount = 0;
             while (rsRecord.next()) {
                 StringBuilder v = new StringBuilder();
@@ -100,26 +104,31 @@ public class ThreadDbSyncSingle extends Thread {
                     ts *=1000;
                 v.append(" ("+ts);
                 for (int i=1; i < taostb.columns; i ++ ){
-                    switch (stable.Type.get(i-1))
-                    {
-                        case "INT":
-                        case "BIGINT":
-                        case "FLOAT":
-                        case "DOUBLE":
-                        case "SMALLINT":
-                        case "TINYINT":
-                        case "BOOL":
-                            v.append(","+rsRecord.getString(i+1)+"");
-                            break;
-                        default:
-                            v.append(",'"+rsRecord.getString(i+1)+"'");
+                    String vCol = rsRecord.getString(i+1);
+                    if (vCol.isEmpty()){
+                        v.append(",null");
+                    }else {
+                        switch (stable.Type.get(i-1))
+                        {
+                            case "INT":
+                            case "BIGINT":
+                            case "FLOAT":
+                            case "DOUBLE":
+                            case "SMALLINT":
+                            case "TINYINT":
+                            case "BOOL":
+                                v.append(","+vCol+"");
+                                break;
+                            default:
+                                v.append(",'"+vCol+"'");
+                        }
                     }
                 }
                 v.append(")");
                 values.append(v);
                 batchCount ++;
                 tbRsCount ++;
-                if ( batchCount >= taos_batchCount )
+                if ( batchCount >= taos_batchCount && values.length() > 0 )
                 {
                     batchCount = 0;
 
@@ -128,7 +137,7 @@ public class ThreadDbSyncSingle extends Thread {
                     //PascalLogger.info(logger,"insert into "+tagMd5+" tagname:"+tbName.tagname+" count: "+tbRsCount+" Total: "+ rsAllCount);
                 }
             }
-            if ( batchCount > 0 ){
+            if ( batchCount > 0 && values.length() > 0 ){
                 tDengineDbService.taosJdbcUpdata(connTo,tags+values);
             }
             long tsProcess = (new Date()).getTime()-tsBegine;
